@@ -169,12 +169,22 @@ OSHashNode *__wrap_OSHash_Next(const OSHash *self, unsigned int *i, OSHashNode *
     return mock_type(OSHashNode *);
 }
 
+OSStore *__wrap_OSStore_Free(OSStore *list) {
+    return mock_type(OSStore *);
+}
+
 void __wrap_OS_CreateEventList(int maxsize, EventList *list) {
     return;
 }
 
-int __wrap_ReadDecodeXML(const char *file, OSDecoderNode **decoderlist_pn, 
-                         OSDecoderNode **decoderlist_nopn, OSList* log_msg) {
+int __wrap_ReadDecodeXML(const char *file, OSDecoderNode **decoderlist_pn,
+                        OSDecoderNode **decoderlist_nopn, OSStore **decoder_list,
+                        OSList* log_msg) {
+    return mock_type(int);
+}
+
+int __wrap_SetDecodeXML(OSList* log_msg, OSStore **decoder_list,
+                        OSDecoderNode **decoderlist_npn, OSDecoderNode **decoderlist_pn) {
     return mock_type(int);
 }
 
@@ -209,7 +219,6 @@ int __wrap_Accumulate_Init(OSHash **acm_store, int *acm_lookups, time_t *acm_pur
 /* tests */
 
 /* w_logtest_init_parameters */
-
 void test_w_logtest_init_parameters_invalid(void **state)
 {
     will_return(__wrap_ReadConfig, OS_INVALID);
@@ -442,6 +451,8 @@ void test_w_logtest_remove_session_OK(void **state)
     expect_value(__wrap_OSHash_Delete_ex, key, "test");
     will_return(__wrap_OSHash_Delete_ex, session);
 
+    will_return(__wrap_OSStore_Free, session->decoder_store);
+
     will_return(__wrap_OSHash_Free, session);
 
     will_return(__wrap_OSHash_Free, session);
@@ -506,11 +517,13 @@ void test_w_logtest_check_inactive_sessions_remove(void **state)
 
     will_return(__wrap_difftime, 1000000);
 
-    // test_w_logtest_remove_session_fail
+    // test_w_logtest_remove_session_ok
     char * key = "test";
 
     expect_value(__wrap_OSHash_Delete_ex, key, "test");
     will_return(__wrap_OSHash_Delete_ex, session);
+
+    will_return(__wrap_OSStore_Free, NULL);
 
     will_return(__wrap_OSHash_Free, session);
 
@@ -541,6 +554,7 @@ void test_w_logtest_initialize_session_error_decoders(void ** state) {
     Config.decoders[0] = decoder_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 0);
 
     session = w_logtest_initialize_session(token, msg);
@@ -567,6 +581,7 @@ void test_w_logtest_initialize_session_error_cbd_list(void ** state) {
 
     will_return(__wrap_time, 0);
     will_return(__wrap_ReadDecodeXML, 1);
+    will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, -1);
 
     session = w_logtest_initialize_session(token, msg);
