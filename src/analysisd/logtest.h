@@ -125,9 +125,9 @@ w_logtest_session_t *w_logtest_initialize_session(char * token, OSList * list_ms
 
 /**
  * @brief Free resources after client closes connection
- * @param token Token which represents the client
+ * @param session Session which represents the client
  */
-void w_logtest_remove_session(char * token);
+void w_logtest_remove_session(w_logtest_session_t *session);
 
 /**
  * @brief Check the inactive logtest sessions

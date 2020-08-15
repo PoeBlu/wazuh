@@ -18,7 +18,7 @@
 
 int w_logtest_init_parameters();
 void *w_logtest_init();
-void w_logtest_remove_session(char *token);
+void w_logtest_remove_session(w_logtest_session_t *session);
 void *w_logtest_check_inactive_sessions(__attribute__((unused)) void * arg);
 
 int logtest_enabled = 1;
@@ -146,6 +146,7 @@ void __wrap_os_remove_cdbrules(ListRule **l_rule) {
 }
 
 void __wrap_os_remove_eventlist(EventList *list) {
+    os_free(list);
     return;
 }
 
@@ -433,33 +434,50 @@ void test_w_logtest_fts_init_success(void **state)
 /* w_logtest_remove_session */
 void test_w_logtest_remove_session_fail(void **state)
 {
-    char * key = "test";
+    w_logtest_session_t * session = NULL;
 
-    expect_value(__wrap_OSHash_Delete_ex, key, "test");
-    will_return(__wrap_OSHash_Delete_ex, NULL);
+    w_logtest_remove_session(session);
 
-    w_logtest_remove_session(key);
+}
 
+void test_w_logtest_remove_session_ok_error_load_decoder_cbd_rules_hash(void **state) {
+    
+    w_logtest_session_t *session;
+    os_calloc(1, sizeof(w_logtest_session_t), session);
+
+    will_return(__wrap_OSStore_Free, session->decoder_store);
+    w_logtest_remove_session(session);
+}
+
+void test_w_logtest_remove_session_ok_error_fts(void **state) {
+    
+    w_logtest_session_t *session;
+    os_calloc(1, sizeof(w_logtest_session_t), session);
+
+    will_return(__wrap_OSStore_Free, session->decoder_store);
+    will_return(__wrap_OSHash_Free, session->g_rules_hash);
+    w_logtest_remove_session(session);
 }
 
 void test_w_logtest_remove_session_OK(void **state)
 {
-    char * key = "test";
+
     w_logtest_session_t *session;
     os_calloc(1, sizeof(w_logtest_session_t), session);
 
-    expect_value(__wrap_OSHash_Delete_ex, key, "test");
-    will_return(__wrap_OSHash_Delete_ex, session);
 
     will_return(__wrap_OSStore_Free, session->decoder_store);
 
+    session->g_rules_hash = (OSHash *) 1;
     will_return(__wrap_OSHash_Free, session);
 
+    session->fts_store = (OSHash *) 1;
     will_return(__wrap_OSHash_Free, session);
 
+    session->acm_store = (OSHash *) 1;
     will_return(__wrap_OSHash_Free, session);
 
-    w_logtest_remove_session(key);
+    w_logtest_remove_session(session);
 
 }
 
@@ -517,22 +535,22 @@ void test_w_logtest_check_inactive_sessions_remove(void **state)
 
     will_return(__wrap_difftime, 1000000);
 
-    // test_w_logtest_remove_session_ok
-    char * key = "test";
-
-    expect_value(__wrap_OSHash_Delete_ex, key, "test");
+    will_return(__wrap_OSHash_Next, NULL);
+    
     will_return(__wrap_OSHash_Delete_ex, session);
 
-    will_return(__wrap_OSStore_Free, NULL);
+    // test_w_logtest_remove_session_ok
+    will_return(__wrap_OSStore_Free, session->decoder_store);
 
+    session->g_rules_hash = (OSHash *) 1;
     will_return(__wrap_OSHash_Free, session);
 
+    session->fts_store = (OSHash *) 1;
     will_return(__wrap_OSHash_Free, session);
 
+    session->acm_store = (OSHash *) 1;
     will_return(__wrap_OSHash_Free, session);
 
-
-    will_return(__wrap_OSHash_Next, NULL);
 
     will_return(__wrap_FOREVER, 0);
 
@@ -545,7 +563,7 @@ void test_w_logtest_check_inactive_sessions_remove(void **state)
 /* w_logtest_initialize_session */
 void test_w_logtest_initialize_session_error_decoders(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
 
@@ -557,6 +575,10 @@ void test_w_logtest_initialize_session_error_decoders(void ** state) {
     will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 0);
 
+    // test_w_logtest_remove_session_ok_error_load_decoder_cbd_rules_hash
+    will_return(__wrap_OSStore_Free, (OSStore *) 1);
+
+
     session = w_logtest_initialize_session(token, msg);
 
     assert_null(session);
@@ -567,7 +589,7 @@ void test_w_logtest_initialize_session_error_decoders(void ** state) {
 
 void test_w_logtest_initialize_session_error_cbd_list(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
     
@@ -580,9 +602,13 @@ void test_w_logtest_initialize_session_error_cbd_list(void ** state) {
     Config.lists[0] = cbd_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 1);
     will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, -1);
+
+    // test_w_logtest_remove_session_ok_error_load_decoder_cbd_rules_hash
+    will_return(__wrap_OSStore_Free, (OSStore *) 1);
 
     session = w_logtest_initialize_session(token, msg);
 
@@ -595,7 +621,7 @@ void test_w_logtest_initialize_session_error_cbd_list(void ** state) {
 
 void test_w_logtest_initialize_session_error_rules(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
     
@@ -612,9 +638,14 @@ void test_w_logtest_initialize_session_error_rules(void ** state) {
     Config.includes[0] = include_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 1);
+    will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, 0);
     will_return(__wrap_Rules_OP_ReadRules, -1);
+
+    // test_w_logtest_remove_session_ok_error_load_decoder_cbd_rules_hash
+    will_return(__wrap_OSStore_Free, (OSStore *) 1);
 
     session = w_logtest_initialize_session(token, msg);
 
@@ -629,7 +660,7 @@ void test_w_logtest_initialize_session_error_rules(void ** state) {
 
 void test_w_logtest_initialize_session_error_hash_rules(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
 
@@ -646,11 +677,16 @@ void test_w_logtest_initialize_session_error_hash_rules(void ** state) {
     Config.includes[0] = include_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 1);
+    will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, 0);
     will_return(__wrap_Rules_OP_ReadRules, 0);
     will_return(__wrap__setlevels, 0);
     will_return(__wrap_OSHash_Create, 0);
+
+    // test_w_logtest_remove_session_ok_error_load_decoder_cbd_rules_hash
+    will_return(__wrap_OSStore_Free, (OSStore *) 1);
 
     session = w_logtest_initialize_session(token, msg);
 
@@ -663,7 +699,7 @@ void test_w_logtest_initialize_session_error_hash_rules(void ** state) {
 
 void test_w_logtest_initialize_session_error_fts_init(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
 
@@ -680,7 +716,9 @@ void test_w_logtest_initialize_session_error_fts_init(void ** state) {
     Config.includes[0] = include_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 1);
+    will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, 0);
     will_return(__wrap_Rules_OP_ReadRules, 0);
     will_return(__wrap__setlevels, 0);
@@ -694,6 +732,11 @@ void test_w_logtest_initialize_session_error_fts_init(void ** state) {
     will_return(__wrap_OSList_Create, NULL);
     expect_string(__wrap__merror, formatted_msg, "(1290): Unable to create a new list (calloc).");
 
+
+    // test_w_logtest_remove_session_ok_error_FTS_INIT
+    will_return(__wrap_OSStore_Free, (OSStore *) 1);
+    will_return(__wrap_OSHash_Free, (OSHash *) 0);
+
     session = w_logtest_initialize_session(token, msg);
 
     assert_null(session);
@@ -706,7 +749,7 @@ void test_w_logtest_initialize_session_error_fts_init(void ** state) {
 
 void test_w_logtest_initialize_session_error_accumulate_init(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
 
@@ -723,7 +766,9 @@ void test_w_logtest_initialize_session_error_accumulate_init(void ** state) {
     Config.includes[0] = include_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 1);
+    will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, 0);
     will_return(__wrap_Rules_OP_ReadRules, 0);
     will_return(__wrap__setlevels, 0);
@@ -733,7 +778,8 @@ void test_w_logtest_initialize_session_error_accumulate_init(void ** state) {
     /* FTS init success */
     OSList *fts_list;
     OSHash *fts_store;
-    OSList *list = (OSList *) 1;
+    OSList *list;
+    os_calloc(1,sizeof(OSList), list);
     OSHash *hash = (OSHash *) 1;
     will_return(__wrap_getDefine_Int, 5);
     will_return(__wrap_OSList_Create, list);
@@ -743,6 +789,11 @@ void test_w_logtest_initialize_session_error_accumulate_init(void ** state) {
     will_return(__wrap_OSHash_setSize, 1);
 
     will_return(__wrap_Accumulate_Init, 0);
+
+    // test_w_logtest_remove_session_ok_error_acm
+    will_return(__wrap_OSStore_Free, (OSStore *) 1);
+    will_return(__wrap_OSHash_Free, (OSStore *) 1);
+    will_return(__wrap_OSHash_Free, (OSStore *) 1);
 
     session = w_logtest_initialize_session(token, msg);
 
@@ -756,7 +807,7 @@ void test_w_logtest_initialize_session_error_accumulate_init(void ** state) {
 
 void test_w_logtest_initialize_session_success(void ** state) {
 
-    char * token = "test";
+    char * token = strdup("test");
     OSList * msg = (OSList *) 1;
     w_logtest_session_t * session;
 
@@ -773,7 +824,9 @@ void test_w_logtest_initialize_session_success(void ** state) {
     Config.includes[0] = include_file;
 
     will_return(__wrap_time, 0);
+    will_return(__wrap_pthread_mutex_init, 0);
     will_return(__wrap_ReadDecodeXML, 1);
+    will_return(__wrap_SetDecodeXML, 0);
     will_return(__wrap_Lists_OP_LoadList, 0);
     will_return(__wrap_Rules_OP_ReadRules, 0);
     will_return(__wrap__setlevels, 0);
@@ -798,6 +851,9 @@ void test_w_logtest_initialize_session_success(void ** state) {
 
     assert_non_null(session);
 
+    os_free(token);
+    os_free(session->eventlist);
+    os_free(session);
     os_free(Config.includes);
     os_free(Config.decoders);
     os_free(Config.lists);

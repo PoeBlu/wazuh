@@ -144,6 +144,7 @@ void * w_logtest_clients_handler(w_logtest_connection_t * connection) {
 w_logtest_session_t *w_logtest_initialize_session(char *token, OSList* list_msg) {
 
     w_logtest_session_t *session;
+    bool retval = true;
 
     char **files;
 
@@ -168,7 +169,7 @@ w_logtest_session_t *w_logtest_initialize_session(char *token, OSList* list_msg)
     while (files && *files) {
         if (!ReadDecodeXML(*files, &session->decoderlist_forpname,
             &session->decoderlist_nopname, &session->decoder_store, list_msg)) {
-            return NULL;
+            goto cleanup;
         }
         files++;
     }
@@ -183,7 +184,7 @@ w_logtest_session_t *w_logtest_initialize_session(char *token, OSList* list_msg)
 
     while (files && *files) {
         if (Lists_OP_LoadList(*files, &session->cdblistnode) < 0) {
-            return NULL;
+            goto cleanup;
         }
         files++;
     }
@@ -198,7 +199,7 @@ w_logtest_session_t *w_logtest_initialize_session(char *token, OSList* list_msg)
     while (files && *files) {
         if (Rules_OP_ReadRules(*files, &session->rule_list, &session->cdblistnode, 
                             &session->eventlist, &session->decoder_store, list_msg) < 0) {
-            return NULL;
+            goto cleanup;
         }
         files++;
     }
@@ -211,37 +212,46 @@ w_logtest_session_t *w_logtest_initialize_session(char *token, OSList* list_msg)
 
     /* Creating rule hash */
     if (session->g_rules_hash = OSHash_Create(), !session->g_rules_hash) {
-        return NULL;
+        goto cleanup;
     }
 
     AddHash_Rule(session->rule_list);
 
     /* Initiate the FTS list */
     if (!w_logtest_fts_init(&session->fts_list, &session->fts_store)) {
-        return NULL;
+        goto cleanup;
     }
 
     /* Initialize the Accumulator */
     if (!Accumulate_Init(&session->acm_store, &session->acm_lookups, &session->acm_purge_ts)) {
-        return NULL;
+        goto cleanup;
+    }
+
+    retval = false;
+
+cleanup:
+
+    if (retval) {
+        w_logtest_remove_session(session);
+        session = NULL;
     }
 
     return session;
 }
 
 
-void w_logtest_remove_session(char *token) {
+void w_logtest_remove_session(w_logtest_session_t *session) {
 
-    w_logtest_session_t *session;
-
-    /* Remove session from hash */
-    if (session = OSHash_Delete_ex(w_logtest_sessions, token), !session) {
+    if (!session) {
         return;
     }
 
+
     /* Remove rule list and rule hash */
     os_remove_rules_list(session->rule_list);
-    OSHash_Free(session->g_rules_hash);
+    if (session->g_rules_hash) {
+        OSHash_Free(session->g_rules_hash);
+    }
 
     /* Remove decoder lists */
     os_remove_decoders_list(session->decoderlist_forpname, session->decoderlist_nopname);
@@ -255,11 +265,15 @@ void w_logtest_remove_session(char *token) {
     os_remove_eventlist(session->eventlist);
 
     /* Remove fts list and hash */
-    OSHash_Free(session->fts_store);
+    if (session->fts_store) {
+        OSHash_Free(session->fts_store);
+    }
     os_free(session->fts_list);
 
     /* Remove accumulator hash */
-    OSHash_Free(session->acm_store);
+    if (session->acm_store) {
+        OSHash_Free(session->acm_store);
+    }
 
     /* Remove session */
     w_mutex_destroy(&session->mutex);
@@ -298,7 +312,8 @@ void *w_logtest_check_inactive_sessions(__attribute__((unused)) void * arg) {
             hash_node = OSHash_Next(w_logtest_sessions, &inode_it, hash_node);
             
             if (session->expired) {
-                w_logtest_remove_session(token_session);
+                OSHash_Delete_ex(w_logtest_sessions, session->token);
+                w_logtest_remove_session(session);
             }
             
         }
@@ -444,12 +459,12 @@ w_logtest_session_t * w_logtest_get_session(cJSON * req, OSList * list_msg) {
         s_token = w_logtest_generate_token();
     } while (OSHash_Get_ex(w_logtest_sessions, s_token) != NULL);
 
-    mdebug1(LOGTEST_INFO_TOKEN_NEW, s_token);
-    sminfo(list_msg, LOGTEST_INFO_TOKEN_NEW, s_token);
-
     session = w_logtest_initialize_session(s_token, list_msg);
+    
     if (session) {
         OSHash_Add_ex(w_logtest_sessions, s_token, session);
+        mdebug1(LOGTEST_INFO_TOKEN_NEW, s_token);
+        sminfo(list_msg, LOGTEST_INFO_TOKEN_NEW, s_token);
     } else {
         smerror(list_msg, LOGTEST_ERROR_INITIALIZE_SESSION, s_token);
         mdebug1(LOGTEST_ERROR_INITIALIZE_SESSION, s_token);
