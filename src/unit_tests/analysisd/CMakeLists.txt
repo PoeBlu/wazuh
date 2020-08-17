@@ -52,7 +52,7 @@ LIST(APPEND analysisd_flags "-Wl,--wrap,ReadConfig -Wl,--wrap,_merror -Wl,--wrap
                              -Wl,--wrap,FOREVER -Wl,--wrap,OS_CreateEventList -Wl,--wrap,ReadDecodeXML -Wl,--wrap,Lists_OP_LoadList \
                              -Wl,--wrap,Lists_OP_MakeAll -Wl,--wrap,Rules_OP_ReadRules -Wl,--wrap,OS_ListLoadRules \
                              -Wl,--wrap,_setlevels -Wl,--wrap,AddHash_Rule -Wl,--wrap,Accumulate_Init -Wl,--wrap,OSStore_Free \
-                             -Wl,--wrap,SetDecodeXML")
+                             -Wl,--wrap,SetDecodeXML -Wl,--wrap,randombytes")
 
 LIST(APPEND analysisd_names "test_logtest-config")
 LIST(APPEND analysisd_flags "-Wl,--wrap,_merror -Wl,--wrap,_mwarn -Wl,--wrap,_mdebug2 -Wl,--wrap,get_nproc -Wl,--wrap,cJSON_CreateObject \

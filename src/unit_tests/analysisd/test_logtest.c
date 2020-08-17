@@ -20,8 +20,12 @@ int w_logtest_init_parameters();
 void *w_logtest_init();
 void w_logtest_remove_session(w_logtest_session_t *session);
 void *w_logtest_check_inactive_sessions(__attribute__((unused)) void * arg);
+w_logtest_session_t *w_logtest_initialize_session(char *token, OSList* list_msg);
+char * w_logtest_generate_token();
 
 int logtest_enabled = 1;
+
+int random_bytes_result = 0;
 
 /* setup/teardown */
 
@@ -215,6 +219,12 @@ int __wrap_AddHash_Rule(RuleNode *node) {
 
 int __wrap_Accumulate_Init(OSHash **acm_store, int *acm_lookups, time_t *acm_purge_ts) {
     return mock_type(int);
+}
+
+void __wrap_randombytes(void *ptr, size_t length) {
+    check_expected(length);
+    *((int32_t *)ptr) = random_bytes_result;
+    return;
 }
 
 /* tests */
@@ -860,6 +870,40 @@ void test_w_logtest_initialize_session_success(void ** state) {
 
 }
 
+/* w_logtest_generate_token */
+
+void test_w_logtest_generate_token_success(void ** state){
+    
+    char* token = NULL;
+
+    random_bytes_result = 1234565555; // 0x49_95_f9_b3
+    expect_value(__wrap_randombytes, length, W_LOGTEST_TOKEN_LENGH >> 1);
+
+    token = w_logtest_generate_token();
+
+    assert_non_null(token);
+    assert_string_equal(token,"4995f9b3");
+
+    os_free(token);
+
+}
+
+void test_w_logtest_generate_token_success_empty_bytes(void ** state){
+    
+    char* token = NULL;
+
+    random_bytes_result = 5555; // 0x15_b3
+    expect_value(__wrap_randombytes, length, W_LOGTEST_TOKEN_LENGH >> 1);
+
+    token = w_logtest_generate_token();
+
+    assert_non_null(token);
+    assert_string_equal(token,"000015b3");
+
+    os_free(token);
+
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -883,14 +927,17 @@ int main(void)
         // Tests w_logtest_check_inactive_sessions
         cmocka_unit_test(test_w_logtest_check_inactive_sessions_no_remove),
         cmocka_unit_test(test_w_logtest_check_inactive_sessions_remove),
-        // w_logtest_initialize_session
+        // Tests w_logtest_initialize_session
         cmocka_unit_test(test_w_logtest_initialize_session_error_decoders),
         cmocka_unit_test(test_w_logtest_initialize_session_error_cbd_list),
         cmocka_unit_test(test_w_logtest_initialize_session_error_rules),
         cmocka_unit_test(test_w_logtest_initialize_session_error_hash_rules),
         cmocka_unit_test(test_w_logtest_initialize_session_error_fts_init),
         cmocka_unit_test(test_w_logtest_initialize_session_error_accumulate_init),
-        cmocka_unit_test(test_w_logtest_initialize_session_success)
+        cmocka_unit_test(test_w_logtest_initialize_session_success),
+        // Tests w_logtest_generate_token
+        cmocka_unit_test(test_w_logtest_generate_token_success),
+        cmocka_unit_test(test_w_logtest_generate_token_success_empty_bytes),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
